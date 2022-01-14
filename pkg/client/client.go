@@ -119,12 +119,14 @@ func NewInsAPICliShowASCIIRequest(s string) *InsAPIRequest {
 
 // Client is an instance of Cisco NX-OS API client.
 type Client struct {
-	host     string
-	port     int
-	protocol string
-	username string
-	password string
-	secure   bool
+	host          string
+	port          int
+	protocol      string
+	username      string
+	password      string
+	secure        bool
+	headerTimeout time.Duration
+	clientTimeout time.Duration
 }
 
 // NewClient returns an instance of Client.
@@ -150,6 +152,18 @@ func (cli *Client) SetPort(p int) error {
 		return fmt.Errorf("invalid port: %d", p)
 	}
 	cli.port = p
+	return nil
+}
+
+// SetHeaderTimeout sets the response header timeout for the http transport.
+func (cli *Client) SetHeaderTimeout(r time.Duration) error {
+	cli.headerTimeout = r
+	return nil
+}
+
+// SetClientTimeout sets the http client timeout.
+func (cli *Client) SetClientTimeout(c time.Duration) error {
+	cli.clientTimeout = c
 	return nil
 }
 
@@ -191,12 +205,15 @@ func (cli *Client) SetSecure() error {
 	return nil
 }
 
-func callAPI(contentType string, url string, payload []byte, username, password string, secure bool) ([]byte, error) {
+func callAPI(contentType string, url string, payload []byte, username, password string, secure bool, headerTimeout time.Duration, clientTimeout time.Duration) ([]byte, error) {
 	tr := &http.Transport{
 		Dial: (&net.Dialer{
 			Timeout: 10 * time.Second,
 		}).Dial,
 		TLSHandshakeTimeout: 10 * time.Second,
+	}
+	if headerTimeout > 0 {
+		tr.ResponseHeaderTimeout = headerTimeout * time.Second
 	}
 	if !secure {
 		tr.TLSClientConfig = &tls.Config{
@@ -205,7 +222,11 @@ func callAPI(contentType string, url string, payload []byte, username, password 
 	}
 	cli := &http.Client{
 		Transport: tr,
-		Timeout:   time.Second * 30,
+	}
+	if clientTimeout > 0 {
+		cli.Timeout = clientTimeout * time.Second
+	} else {
+		cli.Timeout = 30 * time.Second
 	}
 	var reqContentType string
 	switch contentType {
@@ -262,7 +283,7 @@ func (cli *Client) GetSystemInfo() (*SysInfo, error) {
 	if err != nil {
 		return nil, err
 	}
-	resp, err := callAPI("jsonrpc", url, payload, cli.username, cli.password, cli.secure)
+	resp, err := callAPI("jsonrpc", url, payload, cli.username, cli.password, cli.secure, cli.headerTimeout, cli.clientTimeout)
 	if err != nil {
 		return nil, err
 	}
@@ -277,7 +298,7 @@ func (cli *Client) GetVlans() ([]*Vlan, error) {
 	if err != nil {
 		return nil, err
 	}
-	resp, err := callAPI("jsonrpc", url, payload, cli.username, cli.password, cli.secure)
+	resp, err := callAPI("jsonrpc", url, payload, cli.username, cli.password, cli.secure, cli.headerTimeout, cli.clientTimeout)
 	if err != nil {
 		return nil, err
 	}
@@ -292,7 +313,7 @@ func (cli *Client) GetInterfaces() ([]*Interface, error) {
 	if err != nil {
 		return nil, err
 	}
-	resp, err := callAPI("jsonrpc", url, payload, cli.username, cli.password, cli.secure)
+	resp, err := callAPI("jsonrpc", url, payload, cli.username, cli.password, cli.secure, cli.headerTimeout, cli.clientTimeout)
 	if err != nil {
 		return nil, err
 	}
@@ -307,7 +328,7 @@ func (cli *Client) GetInterface(name string) (*Interface, error) {
 	if err != nil {
 		return nil, err
 	}
-	resp, err := callAPI("jsonrpc", url, payload, cli.username, cli.password, cli.secure)
+	resp, err := callAPI("jsonrpc", url, payload, cli.username, cli.password, cli.secure, cli.headerTimeout, cli.clientTimeout)
 	if err != nil {
 		return nil, err
 	}
@@ -325,7 +346,7 @@ func (cli *Client) GetSystemResources() (*SystemResources, error) {
 	if err != nil {
 		return nil, err
 	}
-	resp, err := callAPI("jsonrpc", url, payload, cli.username, cli.password, cli.secure)
+	resp, err := callAPI("jsonrpc", url, payload, cli.username, cli.password, cli.secure, cli.headerTimeout, cli.clientTimeout)
 	if err != nil {
 		return nil, err
 	}
@@ -340,7 +361,7 @@ func (cli *Client) GetSystemEnvironment() (*SystemEnvironment, error) {
 	if err != nil {
 		return nil, err
 	}
-	resp, err := callAPI("jsonrpc", url, payload, cli.username, cli.password, cli.secure)
+	resp, err := callAPI("jsonrpc", url, payload, cli.username, cli.password, cli.secure, cli.headerTimeout, cli.clientTimeout)
 	if err != nil {
 		return nil, err
 	}
@@ -355,7 +376,7 @@ func (cli *Client) GetGeneric(s string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	resp, err := callAPI("jsonrpc", url, payload, cli.username, cli.password, cli.secure)
+	resp, err := callAPI("jsonrpc", url, payload, cli.username, cli.password, cli.secure, cli.headerTimeout, cli.clientTimeout)
 	if err != nil {
 		return nil, err
 	}
@@ -370,7 +391,7 @@ func (cli *Client) GetBgpSummary() (*BgpSummary, error) {
 	if err != nil {
 		return nil, err
 	}
-	resp, err := callAPI("json", url, payload, cli.username, cli.password, cli.secure)
+	resp, err := callAPI("json", url, payload, cli.username, cli.password, cli.secure, cli.headerTimeout, cli.clientTimeout)
 	if err != nil {
 		return nil, err
 	}
@@ -403,7 +424,7 @@ func (cli *Client) getConfiguration(s string) (*Configuration, error) {
 	if err != nil {
 		return nil, err
 	}
-	resp, err := callAPI("json", url, payload, cli.username, cli.password, cli.secure)
+	resp, err := callAPI("json", url, payload, cli.username, cli.password, cli.secure, cli.headerTimeout, cli.clientTimeout)
 	if err != nil {
 		return nil, err
 	}
@@ -419,7 +440,7 @@ func (cli *Client) GetTransceivers() ([]*Transceiver, error) {
 	if err != nil {
 		return nil, err
 	}
-	resp, err := callAPI("jsonrpc", url, payload, cli.username, cli.password, cli.secure)
+	resp, err := callAPI("jsonrpc", url, payload, cli.username, cli.password, cli.secure, cli.headerTimeout, cli.clientTimeout)
 	if err != nil {
 		return nil, err
 	}
@@ -440,7 +461,7 @@ func (cli *Client) GetMacAddressTable(intf string) (*MacAddressTable, error) {
 	if err != nil {
 		return nil, err
 	}
-	resp, err := callAPI("jsonrpc", url, payload, cli.username, cli.password, cli.secure)
+	resp, err := callAPI("jsonrpc", url, payload, cli.username, cli.password, cli.secure, cli.headerTimeout, cli.clientTimeout)
 	if err != nil {
 		return nil, err
 	}
@@ -456,7 +477,7 @@ func (cli *Client) GetCDPNeighbors() (*CDPNeighborTable, error) {
 	if err != nil {
 		return nil, err
 	}
-	resp, err := callAPI("jsonrpc", url, payload, cli.username, cli.password, cli.secure)
+	resp, err := callAPI("jsonrpc", url, payload, cli.username, cli.password, cli.secure, cli.headerTimeout, cli.clientTimeout)
 	if err != nil {
 		return nil, err
 	}
@@ -477,7 +498,7 @@ func (cli *Client) Configure(cmds []string) ([]JSONRPCResponse, error) {
 		return nil, err
 	}
 
-	resp, err := callAPI("jsonrpc", url, payload, cli.username, cli.password, cli.secure)
+	resp, err := callAPI("jsonrpc", url, payload, cli.username, cli.password, cli.secure, cli.headerTimeout, cli.clientTimeout)
 	if err != nil {
 		return nil, err
 	}
